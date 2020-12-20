@@ -1,6 +1,9 @@
+import re
 import socket
 import sys
 import select	#<-- use this library for dealing with socket.recv() requests as otherwise the server will idle and eat too much processing power
+
+from typing import List
 
 #Currently does not terminate properly when using a terminal keyboard interrupt
 #IRC regexp for nicks is apparently: /\A[a-z_\-\[\]\\^{}|`][a-z0-9_\-\[\]\\^{}|`]*\z/i
@@ -8,39 +11,88 @@ import select	#<-- use this library for dealing with socket.recv() requests as o
 						#nicknames have a maximum length of 9 characters ('but clients should accept longer strings'???)
 						#channel names are limited to 50 characters and must begin with # & + or ! and cannot include spaces, ctrl+G, or commas
 
-IP = 'fc00:1337::17'	#IP/port info
+#IP = 'fc00:1337::17'	#IP/port info
+IP = 'localhost'
 PORT = 6667
 
 class Client:
-	###Some stuff about regexp here?
-
+	lineseparator_regex = re.compile(rb"\r?\n") # regex is "\r\n" or "\n"
+  
 	def __init__(self, server, socket):
 		self.server = server
 		self.socket = socket
 		self.nickname = b""
+		self.username = b""
 		self.realname = b""
 		self.readbuffer = b""
 		self.writebuffer = b""
-
-	def write_buffer_size(self):	#skeleton
-		return
+    self.registered = False
 
 	def parse_read_buffer(self):	#skeleton
 		return
 
-	def register_client(self, nickname):
-		self.server = server
-		self.nickname = nickname #need to then update this to server
+	def writebuffer_size(self):
+		return len(self.writebuffer)
 
+	def message(msg: bytes):
+		self.writebuffer += msg
+
+	def register_client(self, nickname):
+		#self.server = server
+		self.nickname = nickname #need to then update this to server
+    
 	def broadcast_names(self):		#skeleton
 		return
 
-	def command_handler(self, command: bytes, arg: bytes):	##### THIS should probably be the bulk of the code
-		if command == "NICK":
-			register_client(arg)
-		elif command == "JOIN":
-			#join a channel with #name format
+	def register_handler(self, command: bytes, args: bytes):
+		if self.nickname == b"":
+			if command == b"NICK":
+				self.nick_handler(args)
+		elif self.realname == b"":
+			if command == b"USER":
+				args = args.split(b" ")
+				if len(args) < 4:
+					print("error - wrong args")
+					return
+				self.username = args[0]
+				self.realname = args[3]
+				self.registered = True
+
+	def nick_handler(self, args: bytes):
+		args = args.split(b" ")
+		if len(args) < 1:
+			print("error - nick not given")
 			return
+		self.register_client(args[0])
+
+	def command_handler(self, command: bytes, args: bytes):
+		print("command:")
+		print(command)
+		print("args:")
+		print(args)
+		if not self.registered:
+			self.register_handler(command, args)
+			return
+		if command == b"NICK":
+			self.nick_handler(args)
+			return
+		elif command == b"JOIN":
+			#join a channel with #name format
+			print("join channel")
+			return
+	
+	def read(self, input: bytes):
+		self.readbuffer = input
+		lines = self.lineseparator_regex.split(self.readbuffer)
+		for line in lines:
+			if line != b"":
+				split_line = line.split(b" ", 1)
+				command = split_line[0]
+				if len(split_line) == 1:
+					args = []
+				else:
+					args = split_line[1]
+				self.command_handler(command, args)
 
 	def disconnect(self):	#skeleton
 		return
@@ -77,7 +129,10 @@ class Server:
 		self.ip = ip
 		self.port = port
 		
-		self.clients = {socket.socket: Client}	#dictionary storing client information [socket, user info] - not sure about this
+		#self.clients = {socket.socket: Client}	#dictionary storing client information [socket, user info]
+		self.clients = {}	#dictionary storing client information [socket, user info]
+		self.clientList = list()
+
 		self.nicks = {bytes, Client}
 		self.channels = {bytes, Channel}
 
@@ -117,10 +172,32 @@ class Server:
 	def run(self):
 		while True:
 			try:
-				(clientsocket, address) = self.serversocket.accept()
-				print(f"Connection established from {address[0]}/{address[1]}")
-				self.clients[clientsocket] = Client(self, clientsocket)
-				#clientsocket.recv(MAX_LENGTH)
+				read_sockets, write_sockets, error_sockets = select.select([client.socket for client in self.clients.values()] + [self.serversocket],
+					[
+						client.socket for client in self.clients.values()
+					if client.writebuffer_size() > 0
+					],
+					[], 10)
+
+				for socket in read_sockets:
+					if socket == self.serversocket:
+						(clientsocket, address) = self.serversocket.accept()
+						print(f"Connection established from {address[0]}/{address[1]}")
+						self.clients[clientsocket] = Client(self, clientsocket)
+
+					else: # client socket
+						data = socket.recv(1024)
+						self.clients[socket].read(data)
+
+				for socket in write_sockets:
+					sent = socket.send(self.clients[socket].writebuffer)
+					print("write data:")
+					print(sent)
+				
+				#(clientsocket, address) = self.serversocket.accept()
+				#print(f"Connection established from {address[0]}/{address[1]}")
+				#self.clients[clientsocket] = Client(self, clientsocket)
+
 				#clientsocket.send(bytes("Welcome to our IRC server!", "utf-8"))
 			except KeyboardInterrupt:
 				print(f"\nKeyboard interrupt detected. Goodbye.")
