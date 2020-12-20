@@ -24,7 +24,7 @@ class Client:
 		self.username = b""
 		self.realname = b""
 
-		self.host, self.port, _, _ = socket.getpeername() #ipv6: host, port, _, _ = socket.getpeername()
+		self.host, self.port, _, _ = socket.getpeername() #ipv4: host, port = socket.getpeername()
 		self.host = self.host.encode()
 
 		self.readbuffer = b""
@@ -67,6 +67,13 @@ class Client:
 			return
 		self.register_client(args[0])
 
+	def join_handler(self, args: bytes):
+		args = args.split(b" ")
+		if len(args) < 1:
+			print("error - channel name not given")
+			return
+		
+	
 	def privmsg_handler(self, args: bytes):
 		args = args.split(b" ", 1)
 		if len(args) == 0:
@@ -140,16 +147,23 @@ class Server:
 		
 		#self.clients = {socket.socket: Client}	#dictionary storing client information [socket, user info]
 		self.clients = {}	#dictionary storing client information [socket, user info]
-		self.clientList = list()
 		
-		self.nicks = {}
-		self.channels = {bytes, Channel}
+		self.nicks = {} # key - nickname
+		self.channels = {} # key - channelname
+
+	def has_channel(self, channel):
+		return channel in self.channels
 
 	def get_client(self, nickname):
 		return self.nicks.get(nickname)
 
 	def get_channel(self, channel):
-		return self.channels.get(channel)
+		if self.has_channel(channel):
+			return self.channels.get(channel)
+		else:
+			new_channel = Channel(self, channel) # add channel if does not exist
+			self.channels[channel] = new_channel
+			return self.channels[channel]
 
 	def change_client_nickname(self, client, oldnick = False):
 		if oldnick:
