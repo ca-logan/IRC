@@ -23,16 +23,23 @@ class Client:
 		self.nickname = b""
 		self.username = b""
 		self.realname = b""
+
+		self.host, self.port, _, _ = socket.getpeername() #ipv6: host, port, _, _ = socket.getpeername()
+		self.host = self.host.encode()
+
 		self.readbuffer = b""
 		self.writebuffer = b""
 
 		self.registered = False
 	
+	def get_prefix(self):
+		return b"%s!%s@%s" % (self.nickname, self.username, self.host)
+
 	def writebuffer_size(self):
 		return len(self.writebuffer)
 
-	def message(msg: bytes):
-		self.writebuffer += msg
+	def message(self, msg: bytes):
+		self.writebuffer += msg + b"\r\n"
 
 	def register_client(self, nickname):
 		#self.server = server
@@ -50,6 +57,7 @@ class Client:
 					return
 				self.username = args[0]
 				self.realname = args[3]
+				self.server.change_client_nickname(self)
 				self.registered = True
 
 	def nick_handler(self, args: bytes):
@@ -59,12 +67,28 @@ class Client:
 			return
 		self.register_client(args[0])
 
-				
+	def privmsg_handler(self, args: bytes):
+		args = args.split(b" ", 1)
+		if len(args) == 0:
+			print("recipient not given")
+			return
+		if len(args) == 1:
+			print("message not given")
+			return
+		if not args[1].startswith(b":"):
+			print("message should start with ':'")
+			return
+		recipient = args[0]
+		message = args[1][1:]
+
+		client = self.server.get_client(recipient)
+		if client:
+			client.message(
+				b":%s PRIVMSG %s :%s"
+                % (self.get_prefix(), recipient, message))
 
 	def command_handler(self, command: bytes, args: bytes):
-		print("command:")
 		print(command)
-		print("args:")
 		print(args)
 		if not self.registered:
 			self.register_handler(command, args)
@@ -76,6 +100,9 @@ class Client:
 			#join a channel with #name format
 			print("join channel")
 			return
+		elif command == b"PRIVMSG":
+			self.privmsg_handler(args)
+
 	
 	def read(self, input: bytes):
 		self.readbuffer = input
@@ -89,6 +116,10 @@ class Client:
 				else:
 					args = split_line[1]
 				self.command_handler(command, args)
+
+	def write(self):
+		sent = self.socket.send(self.writebuffer)
+		self.writebuffer = self.writebuffer[sent:] # remove sent data from buffer
 
 class Channel:
 	def __init__(self, server, channelname):
@@ -111,7 +142,7 @@ class Server:
 		self.clients = {}	#dictionary storing client information [socket, user info]
 		self.clientList = list()
 		
-		self.nicks = {bytes, Client}
+		self.nicks = {}
 		self.channels = {bytes, Channel}
 
 	def get_client(self, nickname):
@@ -120,8 +151,11 @@ class Server:
 	def get_channel(self, channel):
 		return self.channels.get(channel)
 
-	def change_client_nickname(self, client, oldnick, newnick):
-		return	############This is where I'm up to - calum
+	def change_client_nickname(self, client, oldnick = False):
+		if oldnick:
+			del self.nicks[oldnick]
+		self.nicks[client.nickname] = client
+		return
 
 	def start(self):
 		self.serversocket = socket.socket(socket.AF_INET6, socket.SOCK_STREAM) #create a new IPv4 streaming socket
@@ -159,9 +193,7 @@ class Server:
 						self.clients[socket].read(data)
 
 				for socket in write_sockets:
-					sent = socket.send(self.clients[socket].writebuffer)
-					print("write data:")
-					print(sent)
+					self.clients[socket].write()
 				
 				#(clientsocket, address) = self.serversocket.accept()
 				#print(f"Connection established from {address[0]}/{address[1]}")
