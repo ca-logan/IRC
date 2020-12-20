@@ -17,6 +17,7 @@ PORT = 6667
 
 class Client:
 	lineseparator_regex = re.compile(rb"\r?\n") # regex is "\r\n" or "\n"
+  
 	def __init__(self, server, socket):
 		self.server = server
 		self.socket = socket
@@ -25,9 +26,11 @@ class Client:
 		self.realname = b""
 		self.readbuffer = b""
 		self.writebuffer = b""
+    self.registered = False
 
-		self.registered = False
-	
+	def parse_read_buffer(self):	#skeleton
+		return
+
 	def writebuffer_size(self):
 		return len(self.writebuffer)
 
@@ -37,6 +40,9 @@ class Client:
 	def register_client(self, nickname):
 		#self.server = server
 		self.nickname = nickname #need to then update this to server
+    
+	def broadcast_names(self):		#skeleton
+		return
 
 	def register_handler(self, command: bytes, args: bytes):
 		if self.nickname == b"":
@@ -58,8 +64,6 @@ class Client:
 			print("error - nick not given")
 			return
 		self.register_client(args[0])
-
-				
 
 	def command_handler(self, command: bytes, args: bytes):
 		print("command:")
@@ -90,11 +94,29 @@ class Client:
 					args = split_line[1]
 				self.command_handler(command, args)
 
+	def disconnect(self):	#skeleton
+		return
+
+	def construct_message(self):	#skeleton
+		return
+
+	def reply(self):	#skeleton
+		return
+
+	def message_channel(self, channel):	#skeleton
+		return
+
+	def message_user(self, client):	#skeleton
+		return
+
+	def send_user_list(self):	#skeleton
+		return
+
 class Channel:
 	def __init__(self, server, channelname):
 		self.server = server
 		self.channelname = channelname
-		self.clientlist = {}
+		self.clientlist = {socket.socket: Client}	###not sure about this dict
 
 	def add_client(self, client):
 		self.clientlist.add(client)
@@ -110,7 +132,7 @@ class Server:
 		#self.clients = {socket.socket: Client}	#dictionary storing client information [socket, user info]
 		self.clients = {}	#dictionary storing client information [socket, user info]
 		self.clientList = list()
-		
+
 		self.nicks = {bytes, Client}
 		self.channels = {bytes, Channel}
 
@@ -120,8 +142,17 @@ class Server:
 	def get_channel(self, channel):
 		return self.channels.get(channel)
 
-	def change_client_nickname(self, client, oldnick, newnick):
-		return	############This is where I'm up to - calum
+	def change_client_nickname(self, client, oldnick, newnick):	#skeleton
+		return	
+
+	def remove_client_from_channel(self, client, channel):	#skeleton
+		return
+
+	def remove_client_from_server(self, client):	#skeleton
+		return
+
+	def remove_channel(self, channel):	#skeleton
+		return
 
 	def start(self):
 		self.serversocket = socket.socket(socket.AF_INET6, socket.SOCK_STREAM) #create a new IPv4 streaming socket
