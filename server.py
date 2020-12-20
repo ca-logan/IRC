@@ -24,7 +24,7 @@ class Client:
 		self.username = b""
 		self.realname = b""
 
-		self.host, self.port, _, _ = socket.getpeername() #ipv6: host, port, _, _ = socket.getpeername()
+		self.host, self.port, _, _ = socket.getpeername() #ipv4: host, port = socket.getpeername()
 		self.host = self.host.encode()
 
 		self.readbuffer = b""
@@ -33,7 +33,7 @@ class Client:
 
 	def parse_read_buffer(self):	#skeleton
 		return
-
+  
 	def get_prefix(self):
 		return b"%s!%s@%s" % (self.nickname, self.username, self.host)
 
@@ -72,6 +72,18 @@ class Client:
 			return
 		self.register_client(args[0])
 
+	def join_handler(self, args: bytes):
+		args = args.split(b" ")
+		if len(args) < 1:
+			print("error - channel name not given")
+			return
+		channelname = args[0]
+		channel = self.server.get_channel(channelname)
+		channel.add_client(self)
+		message = b":%s JOIN %s" % (self.get_prefix(), channelname)
+		self.message_channel(channel, message, True) # True - optional arg to notify that it's JOIN
+		
+	
 	def privmsg_handler(self, args: bytes):
 		args = args.split(b" ", 1)
 		if len(args) == 0:
@@ -85,12 +97,15 @@ class Client:
 			return
 		recipient = args[0]
 		message = args[1][1:]
-
+		message_to_send = b":%s PRIVMSG %s :%s" % (self.get_prefix(), recipient, message)
 		client = self.server.get_client(recipient)
 		if client:
-			client.message(
-				b":%s PRIVMSG %s :%s"
-                % (self.get_prefix(), recipient, message))
+			client.message(message_to_send)
+			return
+		channel = self.server.get_channel(recipient)
+		if channel:
+			self.message_channel(channel, message_to_send)
+			return
 
 	def command_handler(self, command: bytes, args: bytes):
 		print(command)
@@ -103,7 +118,7 @@ class Client:
 			return
 		elif command == b"JOIN":
 			#join a channel with #name format
-			print("join channel")
+			self.join_handler(args)
 			return
 		elif command == b"PRIVMSG":
 			self.privmsg_handler(args)
@@ -136,8 +151,10 @@ class Client:
 	def reply(self):	#skeleton
 		return
 
-	def message_channel(self, channel):	#skeleton
-		return
+	def message_channel(self, channel, message, join = False):
+		for client in channel.clientlist:
+			if join or client != self: # do not send if not join and this client
+				client.message(message)
 
 	def message_user(self, client):	#skeleton
 		return
@@ -149,7 +166,7 @@ class Channel:
 	def __init__(self, server, channelname):
 		self.server = server
 		self.channelname = channelname
-		self.clientlist = {socket.socket: Client}	###not sure about this dict
+		self.clientlist = set()
 
 	def add_client(self, client):
 		self.clientlist.add(client)
@@ -164,16 +181,23 @@ class Server:
 		
 		#self.clients = {socket.socket: Client}	#dictionary storing client information [socket, user info]
 		self.clients = {}	#dictionary storing client information [socket, user info]
-		self.clientList = list()
 		
-		self.nicks = {}
-		self.channels = {bytes, Channel}
+		self.nicks = {} # key - nickname
+		self.channels = {} # key - channelname
+
+	def has_channel(self, channel):
+		return channel in self.channels
 
 	def get_client(self, nickname):
 		return self.nicks.get(nickname)
 
 	def get_channel(self, channel):
-		return self.channels.get(channel)
+		if self.has_channel(channel):
+			return self.channels.get(channel)
+		else:
+			new_channel = Channel(self, channel) # add channel if does not exist
+			self.channels[channel] = new_channel
+			return self.channels[channel]
 
 	def change_client_nickname(self, client, oldnick = False):
 		if oldnick:
