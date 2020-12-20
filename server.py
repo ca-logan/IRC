@@ -30,12 +30,10 @@ class Client:
 
 		self.readbuffer = b""
 		self.writebuffer = b""
-    self.registered = False
+		self.registered = False
 
 	def parse_read_buffer(self):	#skeleton
 		return
-
-		self.registered = False
 	
 	def get_prefix(self):
 		return b"%s!%s@%s" % (self.nickname, self.username, self.host)
@@ -80,6 +78,11 @@ class Client:
 		if len(args) < 1:
 			print("error - channel name not given")
 			return
+		channelname = args[0]
+		channel = self.server.get_channel(channelname)
+		channel.add_client(self)
+		message = b":%s JOIN %s" % (self.get_prefix(), channelname)
+		self.message_channel(channel, message, True) # True - optional arg to notify that it's JOIN
 		
 	
 	def privmsg_handler(self, args: bytes):
@@ -95,12 +98,15 @@ class Client:
 			return
 		recipient = args[0]
 		message = args[1][1:]
-
+		message_to_send = b":%s PRIVMSG %s :%s" % (self.get_prefix(), recipient, message)
 		client = self.server.get_client(recipient)
 		if client:
-			client.message(
-				b":%s PRIVMSG %s :%s"
-                % (self.get_prefix(), recipient, message))
+			client.message(message_to_send)
+			return
+		channel = self.server.get_channel(recipient)
+		if channel:
+			self.message_channel(channel, message_to_send)
+			return
 
 	def command_handler(self, command: bytes, args: bytes):
 		print(command)
@@ -113,7 +119,7 @@ class Client:
 			return
 		elif command == b"JOIN":
 			#join a channel with #name format
-			print("join channel")
+			self.join_handler(args)
 			return
 		elif command == b"PRIVMSG":
 			self.privmsg_handler(args)
@@ -145,8 +151,10 @@ class Client:
 	def reply(self):	#skeleton
 		return
 
-	def message_channel(self, channel):	#skeleton
-		return
+	def message_channel(self, channel, message, join = False):
+		for client in channel.clientlist:
+			if join or client != self: # do not send if not join and this client
+				client.message(message)
 
 	def message_user(self, client):	#skeleton
 		return
@@ -158,7 +166,7 @@ class Channel:
 	def __init__(self, server, channelname):
 		self.server = server
 		self.channelname = channelname
-		self.clientlist = {socket.socket: Client}	###not sure about this dict
+		self.clientlist = set()
 
 	def add_client(self, client):
 		self.clientlist.add(client)
