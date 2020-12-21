@@ -1,4 +1,5 @@
 import re
+import time
 import socket
 import sys
 import select	#<-- use this library for dealing with socket.recv() requests as otherwise the server will idle and eat too much processing power
@@ -31,6 +32,8 @@ class Client:
 		self.readbuffer = b""
 		self.writebuffer = b""
 		self.registered = False
+		self.timestamp_active = time.time()
+		self.sent_ping = False
 
 	def parse_read_buffer(self):	#skeleton
 		return
@@ -125,8 +128,8 @@ class Client:
 		elif command == b"PRIVMSG":
 			self.privmsg_handler(args)
 
-	def read(self, input: bytes):
-		self.readbuffer = input
+	def read(self):
+		self.readbuffer = self.socket.recv(1024)
 		lines = self.lineseparator_regex.split(self.readbuffer)
 		for line in lines:
 			if line != b"":
@@ -137,6 +140,8 @@ class Client:
 				else:
 					args = split_line[1]
 				self.command_handler(command, args)
+				self.timestamp_active = time.time()
+				self.sent_ping = False
 
 	def write(self):
 		sent = self.socket.send(self.writebuffer)
@@ -169,6 +174,20 @@ class Client:
 				user_list += b" " + client.nickname
 		self.reply(b"353 %s = %s :%s" % (self.nickname, channel.channelname, user_list))
 		self.reply(b"366 %s %s :End of NAMES list" % (self.nickname, channel.channelname))
+	
+	def check_activeness(self):
+		now = time.time()
+		if self.timestamp_active + 30 < now:
+			self.disconnect()
+		elif not self.sent_ping and self.timestamp_active + 5 < now:
+			if self.registered:
+				#send ping
+				print(b"PING to %s" % self.nickname)
+				self.sent_ping = True
+				self.message(b"PING :%s" % self.server.name)
+			else:
+				self.disconnect()
+
 
 class Channel:
 	def __init__(self, server, channelname):
@@ -238,12 +257,13 @@ class Server:
 		self.run()
 
 	def run(self):
+		last_activeness_check = time.time()
 		while True:
 			try:
 				read_sockets, write_sockets, error_sockets = select.select([client.socket for client in self.clients.values()] + [self.serversocket],
 					[
 						client.socket for client in self.clients.values()
-					if client.writebuffer_size() > 0
+						if client.writebuffer_size() > 0
 					],
 					[], 10)
 
@@ -254,11 +274,15 @@ class Server:
 						self.clients[clientsocket] = Client(self, clientsocket)
 
 					else: # client socket
-						data = socket.recv(1024)
-						self.clients[socket].read(data)
+						self.clients[socket].read()
 
 				for socket in write_sockets:
 					self.clients[socket].write()
+				
+				now = time.time()
+				if last_activeness_check + 2 < now:
+					for client in self.clients.values():
+						client.check_activeness()
 				
 				#(clientsocket, address) = self.serversocket.accept()
 				#print(f"Connection established from {address[0]}/{address[1]}")
