@@ -2,11 +2,10 @@ import re
 import time
 import socket
 import sys
-import select	#<-- use this library for dealing with socket.recv() requests as otherwise the server will idle and eat too much processing power
+import select	
 
 from typing import List
 
-#Currently does not terminate properly when using a terminal keyboard interrupt
 #IRC regexp for nicks is apparently: /\A[a-z_\-\[\]\\^{}|`][a-z0-9_\-\[\]\\^{}|`]*\z/i
 #From IRC documentation: server names are limited to 63 characters
 						#nicknames have a maximum length of 9 characters ('but clients should accept longer strings'???)
@@ -37,7 +36,7 @@ class Client:
 
 	def parse_read_buffer(self):	#skeleton
 		return
-	
+  
 	def get_prefix(self):
 		return b"%s!%s@%s" % (self.nickname, self.username, self.host)
 
@@ -147,8 +146,9 @@ class Client:
 		sent = self.socket.send(self.writebuffer)
 		self.writebuffer = self.writebuffer[sent:] # remove sent data from buffer
 
-	def disconnect(self):	#skeleton
-		return
+	def disconnect(self):
+		self.socket.close()
+		self.server.remove_client_from_server(self)
 
 	def construct_message(self):	#skeleton
 		return
@@ -232,14 +232,15 @@ class Server:
 			del self.nicks[oldnick]
 		self.nicks[client.nickname] = client	
 
-	def remove_client_from_channel(self, client, channel):	#skeleton
-		return
+	def remove_client_from_channel(self, client, channel_name):
+		channel = self.channels[channel_name]
+		channel.remove_client(client)
 
-	def remove_client_from_server(self, client):	#skeleton
-		return
+	def remove_client_from_server(self, client):
+		del self.clients[client.socket]
 
-	def remove_channel(self, channel):	#skeleton
-		return
+	def remove_channel(self, channel):
+		del self.channels[channel]
 
 	def start(self):
 		self.serversocket = socket.socket(socket.AF_INET6, socket.SOCK_STREAM) #create a new IPv4 streaming socket
