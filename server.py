@@ -64,6 +64,10 @@ class Client:
 				self.realname = args[3]
 				self.server.change_client_nickname(self)
 				self.registered = True
+				self.reply(b"001 %s :Welcome to our IRC server!" % self.nickname)
+				self.reply(b"002 %s :Your host is %s" % (self.nickname, self.server.name))
+				self.reply(b"003 %s :This server was created sometime" % self.nickname)
+				self.reply(b"004 %s :SERVER INFO" % self.nickname)
 
 	def nick_handler(self, args: bytes):
 		args = args.split(b" ")
@@ -82,8 +86,8 @@ class Client:
 		channel.add_client(self)
 		message = b":%s JOIN %s" % (self.get_prefix(), channelname)
 		self.message_channel(channel, message, True) # True - optional arg to notify that it's JOIN
+		self.send_user_list(channel)
 		
-	
 	def privmsg_handler(self, args: bytes):
 		args = args.split(b" ", 1)
 		if len(args) == 0:
@@ -108,8 +112,6 @@ class Client:
 			return
 
 	def command_handler(self, command: bytes, args: bytes):
-		print(command)
-		print(args)
 		if not self.registered:
 			self.register_handler(command, args)
 			return
@@ -117,13 +119,11 @@ class Client:
 			self.nick_handler(args)
 			return
 		elif command == b"JOIN":
-			#join a channel with #name format
 			self.join_handler(args)
 			return
 		elif command == b"PRIVMSG":
 			self.privmsg_handler(args)
 
-	
 	def read(self, input: bytes):
 		self.readbuffer = input
 		lines = self.lineseparator_regex.split(self.readbuffer)
@@ -148,19 +148,27 @@ class Client:
 	def construct_message(self):	#skeleton
 		return
 
-	def reply(self):	#skeleton
-		return
+	def reply(self, message):	#skeleton
+		self.message(b":%s %s" % (self.server.name, message))
 
 	def message_channel(self, channel, message, join = False):
 		for client in channel.clientlist:
-			if join or client != self: # do not send if not join and this client
-				client.message(message)
+			if not join and client == self: # do not send if not join and this client
+				continue
+			client.message(message)
 
 	def message_user(self, client):	#skeleton
 		return
 
-	def send_user_list(self):	#skeleton
-		return
+	def send_user_list(self, channel):
+		user_list = b""
+		for client in channel.clientlist:
+			if not user_list:
+				user_list += client.nickname
+			else:
+				user_list += b" " + client.nickname
+		self.reply(b"353 %s = %s :%s" % (self.nickname, channel.channelname, user_list))
+		self.reply(b"366 %s %s :End of NAMES list" % (self.nickname, channel.channelname))
 
 class Channel:
 	def __init__(self, server, channelname):
@@ -178,6 +186,7 @@ class Server:
 	def __init__(self, ip: str, port: int):
 		self.ip = ip
 		self.port = port
+		self.name = socket.gethostname().encode()
 		
 		#self.clients = {socket.socket: Client}	#dictionary storing client information [socket, user info]
 		self.clients = {}	#dictionary storing client information [socket, user info]
