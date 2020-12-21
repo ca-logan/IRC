@@ -177,9 +177,9 @@ class Client:
 	
 	def check_activeness(self):
 		now = time.time()
-		if self.timestamp_active + 30 < now:
+		if self.timestamp_active + 60 < now:
 			self.disconnect()
-		elif not self.sent_ping and self.timestamp_active + 5 < now:
+		elif not self.sent_ping and self.timestamp_active + 30 < now:
 			if self.registered:
 				#send ping
 				print(b"PING to %s" % self.nickname)
@@ -237,6 +237,8 @@ class Server:
 		channel.remove_client(client)
 
 	def remove_client_from_server(self, client):
+		for channel in self.channels.values():
+			channel.remove_client(client)
 		del self.clients[client.socket]
 
 	def remove_channel(self, channel):
@@ -281,8 +283,10 @@ class Server:
 					self.clients[socket].write()
 				
 				now = time.time()
-				if last_activeness_check + 2 < now:
-					for client in self.clients.values():
+				if last_activeness_check + 10 < now:
+					# copy list because clients dictionary can change during iteration
+					clientlist = list(self.clients.values())
+					for client in clientlist:
 						client.check_activeness()
 				
 				#(clientsocket, address) = self.serversocket.accept()
