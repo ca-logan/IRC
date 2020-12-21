@@ -12,7 +12,7 @@ from typing import List
 						#channel names are limited to 50 characters and must begin with # & + or ! and cannot include spaces, ctrl+G, or commas
 
 #IP = 'fc00:1337::17'	#IP/port info
-IP = '::1'
+IP = 'localhost'
 PORT = 6667
 
 class Client:
