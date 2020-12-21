@@ -156,9 +156,9 @@ class Client:
 	def reply(self, message):	#skeleton
 		self.message(b":%s %s" % (self.server.name, message))
 
-	def message_channel(self, channel, message, join = False):
+	def message_channel(self, channel, message, include_self = False):
 		for client in channel.clientlist:
-			if not join and client == self: # do not send if not join and this client
+			if not include_self and client == self: # do not send if not include_self and this client
 				continue
 			client.message(message)
 
@@ -207,7 +207,6 @@ class Server:
 		self.port = port
 		self.name = socket.gethostname().encode()
 		
-		#self.clients = {socket.socket: Client}	#dictionary storing client information [socket, user info]
 		self.clients = {}	#dictionary storing client information [socket, user info]
 		
 		self.nicks = {} # key - nickname
@@ -237,15 +236,18 @@ class Server:
 		channel.remove_client(client)
 
 	def remove_client_from_server(self, client):
+		message = b":%s QUIT :Leaving" % client.get_prefix()
 		for channel in self.channels.values():
-			channel.remove_client(client)
+			if client in channel.clientlist:
+				client.message_channel(channel, message)
+				channel.remove_client(client)
 		del self.clients[client.socket]
 
 	def remove_channel(self, channel):
 		del self.channels[channel]
 
 	def start(self):
-		self.serversocket = socket.socket(socket.AF_INET6, socket.SOCK_STREAM) #create a new IPv4 streaming socket
+		self.serversocket = socket.socket(socket.AF_INET6, socket.SOCK_STREAM) #create a new IPv6 streaming socket
 		self.serversocket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)	#allows the socket to reuse our server address	
 		try:
 			self.serversocket.bind((self.ip, self.port))	#bind the new socket to a public host with the conventional IRC port (6667)
@@ -289,11 +291,6 @@ class Server:
 					for client in clientlist:
 						client.check_activeness()
 				
-				#(clientsocket, address) = self.serversocket.accept()
-				#print(f"Connection established from {address[0]}/{address[1]}")
-				#self.clients[clientsocket] = Client(self, clientsocket)
-
-				#clientsocket.send(bytes("Welcome to our IRC server!", "utf-8"))
 			except KeyboardInterrupt:
 				print(f"\nKeyboard interrupt detected. Goodbye.")
 				sys.exit(1)
