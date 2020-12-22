@@ -130,6 +130,8 @@ class Client:
 			return
 		elif command == b"PRIVMSG":
 			self.privmsg_handler(args)
+		else:
+			self.reply(b"421 %s %s :Unknown command" % (self.nickname, command))
 
 	def read(self):
 		self.readbuffer = self.socket.recv(1024)
@@ -245,7 +247,9 @@ class Server:
 			if client in channel.clientlist:
 				client.message_channel(channel, message)
 				channel.remove_client(client)
+		nickname = client.nickname
 		del self.clients[client.socket]
+		del self.nicks[nickname]
 
 	def remove_channel(self, channel):
 		del self.channels[channel]
