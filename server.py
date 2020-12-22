@@ -53,7 +53,7 @@ class Client:
 			if command == b"USER":
 				args = args.split(b" ")
 				if len(args) < 4:
-					self.reply(b"error - wrong args")
+					self.reply_461(command)
 					return
 				self.username = args[0]
 				self.realname = args[3]
@@ -65,16 +65,25 @@ class Client:
 				self.reply(b"004 %s :SERVER INFO" % self.nickname)
 
 	def nick_handler(self, args: bytes):
+		if not args:
+			self.reply(b"431 :No nickname given")
+			return
 		args = args.split(b" ")
 		if len(args) < 1:
-			self.reply(b"error - nick not given")
+			self.reply(b"431 :No nickname given")
+			return
+		if self.server.has_nickname(args[0]):
+			self.reply(b"433 :Nickname is already in use")
 			return
 		self.register_client(args[0])
 
 	def join_handler(self, args: bytes):
+		if not args:
+			self.reply_461(b"JOIN")
+			return
 		args = args.split(b" ")
 		if len(args) < 1:
-			self.reply(b"error - channel name not given")
+			self.reply_461(b"JOIN")
 			return
 		channelname = args[0]
 		channel = self.server.get_channel(channelname)
@@ -84,15 +93,18 @@ class Client:
 		self.send_user_list(channel)
 		
 	def privmsg_handler(self, args: bytes):
+		if not args:
+			self.reply(b"411 %s :No recipient given (PRIVMSG)" % self.nickname)
+			return
 		args = args.split(b" ", 1)
 		if len(args) == 0:
-			self.reply(b"recipient not given")
+			self.reply(b"411 %s :No recipient given (PRIVMSG)" % self.nickname)
 			return
 		if len(args) == 1:
-			self.reply(b"message not given")
+			self.reply(b"412 %s :No text to send" % self.nickname)
 			return
 		if not args[1].startswith(b":"):
-			self.reply(b"message should start with ':'")
+			self.reply(b"412 %s :No text to send" % self.nickname)
 			return
 		recipient = args[0]
 		message = args[1][1:]
@@ -127,7 +139,7 @@ class Client:
 				split_line = line.split(b" ", 1)
 				command = split_line[0]
 				if len(split_line) == 1:
-					args = []
+					args = b""
 				else:
 					args = split_line[1]
 				self.command_handler(command, args)
@@ -144,6 +156,9 @@ class Client:
 
 	def reply(self, message):
 		self.message(b":%s %s" % (self.server.name, message))
+
+	def reply_461(self, command):
+		self.reply(b"461 %s %s ::Not enough parameters" % (self.nickname, command))
 
 	def message_channel(self, channel, message, include_self = False):
 		for client in channel.clientlist:
@@ -163,9 +178,9 @@ class Client:
 	
 	def check_activeness(self):
 		now = time.time()
-		if self.timestamp_active + 60 < now:
+		if self.timestamp_active + 120 < now:
 			self.disconnect()
-		elif not self.sent_ping and self.timestamp_active + 30 < now:
+		elif not self.sent_ping and self.timestamp_active + 60 < now:
 			if self.registered:
 				#send ping
 				print(b"PING to %s" % self.nickname)
@@ -201,6 +216,9 @@ class Server:
 	def has_channel(self, channel):
 		return channel in self.channels
 
+	def has_nickname(self, nickname):
+		return nickname in self.nicks.keys()
+	
 	def get_client(self, nickname):
 		return self.nicks.get(nickname)
 
@@ -238,10 +256,10 @@ class Server:
 		try:
 			self.serversocket.bind((self.ip, self.port))	#bind the new socket to a public host with the conventional IRC port (6667)
 		except socket.error as e:
-			self.print(f"{e}: Could not bind to port {port}.")
+			print(f"{e}: Could not bind to port {self.port}.")
 			sys.exit(1)
 		except OSError as o:
-			self.print(f"{o}: Address already in use")
+			print(f"{o}: Address already in use")
 			sys.exit(1)
 		self.serversocket.listen(5)	#the socket will listen for 5 requests at any time	
 		print(f'Listening for incoming connections on {IP}/{PORT}')
