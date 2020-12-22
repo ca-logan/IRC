@@ -11,8 +11,7 @@ from typing import List
 						#nicknames have a maximum length of 9 characters ('but clients should accept longer strings'???)
 						#channel names are limited to 50 characters and must begin with # & + or ! and cannot include spaces, ctrl+G, or commas
 
-#IP = 'fc00:1337::17'	#IP/port info
-IP = 'localhost'
+IP = 'fc00:1337::17'	#IP/port info
 PORT = 6667
 
 class Client:
@@ -33,9 +32,6 @@ class Client:
 		self.registered = False
 		self.timestamp_active = time.time()
 		self.sent_ping = False
-
-	def parse_read_buffer(self):	#skeleton
-		return
   
 	def get_prefix(self):
 		return b"%s!%s@%s" % (self.nickname, self.username, self.host)
@@ -47,11 +43,7 @@ class Client:
 		self.writebuffer += msg + b"\r\n"
 
 	def register_client(self, nickname):
-		#self.server = server
-		self.nickname = nickname #need to then update this to server
-    
-	def broadcast_names(self):		#skeleton
-		return
+		self.nickname = nickname
 
 	def register_handler(self, command: bytes, args: bytes):
 		if self.nickname == b"":
@@ -61,7 +53,7 @@ class Client:
 			if command == b"USER":
 				args = args.split(b" ")
 				if len(args) < 4:
-					print("error - wrong args")
+					self.reply(b"error - wrong args")
 					return
 				self.username = args[0]
 				self.realname = args[3]
@@ -75,32 +67,32 @@ class Client:
 	def nick_handler(self, args: bytes):
 		args = args.split(b" ")
 		if len(args) < 1:
-			print("error - nick not given")
+			self.reply(b"error - nick not given")
 			return
 		self.register_client(args[0])
 
 	def join_handler(self, args: bytes):
 		args = args.split(b" ")
 		if len(args) < 1:
-			print("error - channel name not given")
+			self.reply(b"error - channel name not given")
 			return
 		channelname = args[0]
 		channel = self.server.get_channel(channelname)
 		channel.add_client(self)
 		message = b":%s JOIN %s" % (self.get_prefix(), channelname)
-		self.message_channel(channel, message, True) # True - optional arg to notify that it's JOIN
+		self.message_channel(channel, message, True) # True - optional arg to include self in recipients
 		self.send_user_list(channel)
 		
 	def privmsg_handler(self, args: bytes):
 		args = args.split(b" ", 1)
 		if len(args) == 0:
-			print("recipient not given")
+			self.reply(b"recipient not given")
 			return
 		if len(args) == 1:
-			print("message not given")
+			self.reply(b"message not given")
 			return
 		if not args[1].startswith(b":"):
-			print("message should start with ':'")
+			self.reply(b"message should start with ':'")
 			return
 		recipient = args[0]
 		message = args[1][1:]
@@ -150,10 +142,7 @@ class Client:
 		self.socket.close()
 		self.server.remove_client_from_server(self)
 
-	def construct_message(self):	#skeleton
-		return
-
-	def reply(self, message):	#skeleton
+	def reply(self, message):
 		self.message(b":%s %s" % (self.server.name, message))
 
 	def message_channel(self, channel, message, include_self = False):
@@ -161,9 +150,6 @@ class Client:
 			if not include_self and client == self: # do not send if not include_self and this client
 				continue
 			client.message(message)
-
-	def message_user(self, client):	#skeleton
-		return
 
 	def send_user_list(self, channel):
 		user_list = b""
@@ -207,10 +193,10 @@ class Server:
 		self.port = port
 		self.name = socket.gethostname().encode()
 		
-		self.clients = {}	#dictionary storing client information [socket, user info]
+		self.clients = {}	#dictionary storing client information [socket, client]
 		
-		self.nicks = {} # key - nickname
-		self.channels = {} # key - channelname
+		self.nicks = {} #[nickname, client]
+		self.channels = {} # [channelname, channel]
 
 	def has_channel(self, channel):
 		return channel in self.channels
